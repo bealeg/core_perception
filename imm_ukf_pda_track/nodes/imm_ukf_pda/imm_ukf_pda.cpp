@@ -25,11 +25,13 @@ ImmUkfPda::ImmUkfPda()
   has_subscribed_vectormap_(false),
   private_nh_("~")
 {
-  private_nh_.param<std::string>("tracking_frame", tracking_frame_, "map");
+  private_nh_.param<std::string>("tracking_frame", tracking_frame_, "world");
   private_nh_.param<int>("life_time_threshold", life_time_threshold_, 8);
   private_nh_.param<double>("gating_threshold", gating_threshold_, 9.22);
   private_nh_.param<double>("gate_probability", gate_probability_, 0.99);
+  ROS_INFO("[IMM_UKF_PDA] gate_probability: %f", gate_probability_);
   private_nh_.param<double>("detection_probability", detection_probability_, 0.9);
+  ROS_INFO("[IMM_UKF_PDA] detection_probability_: %f", detection_probability_);
   private_nh_.param<double>("static_velocity_threshold", static_velocity_threshold_, 0.5);
   private_nh_.param<int>("static_num_history_threshold", static_num_history_threshold_, 3);
   private_nh_.param<double>("prevent_explosion_threshold", prevent_explosion_threshold_, 1000);
@@ -54,8 +56,9 @@ ImmUkfPda::ImmUkfPda()
 
 void ImmUkfPda::run()
 {
-  pub_object_array_ = node_handle_.advertise<autoware_msgs::DetectedObjectArray>("objects_out", 1);
-  sub_detected_array_ = node_handle_.subscribe("objects_in", 1, &ImmUkfPda::callback, this);
+  pub_object_array_ = node_handle_.advertise<autoware_msgs::DetectedObjectArray>("/detection/objects", 1);
+  pub_debug_objs_ = node_handle_.advertise<autoware_msgs::DetectedObjectArray>("/detection/extras", 1);
+  sub_detected_array_ = node_handle_.subscribe("/detection/fusion_tools/objects", 1, &ImmUkfPda::callback, this);
 
   if (use_vectormap_)
   {
@@ -715,6 +718,19 @@ void ImmUkfPda::makeOutput(const autoware_msgs::DetectedObjectArray& input,
       used_targets_indices.push_back(i);
     }
   }
+  /* try to put object publisher here!!!!!
+   *
+   */
+  autoware_msgs::DetectedObjectArray extras;
+  for (size_t i=0; i < input.objects.size(); i++) {
+	  extras.objects.push_back(input.objects[i]);
+  }
+  transformPoseToLocal(extras);
+  pub_debug_objs_.publish(extras);
+  /*
+   * end
+   */
+  
   detected_objects_output = removeRedundantObjects(tmp_objects, used_targets_indices);
 }
 
@@ -789,7 +805,7 @@ void ImmUkfPda::tracker(const autoware_msgs::DetectedObjectArray& input,
   // start UKF process
   for (size_t i = 0; i < targets_.size(); i++)
   {
-    targets_[i].is_stable_ = false;
+    targets_[i].is_stable_ = false; // false;
     targets_[i].is_static_ = false;
 
     if (targets_[i].tracking_num_ == TrackingState::Die)
@@ -812,7 +828,6 @@ void ImmUkfPda::tracker(const autoware_msgs::DetectedObjectArray& input,
     {
       continue;
     }
-
     targets_[i].update(use_sukf_, detection_probability_, gate_probability_, gating_threshold_, object_vec);
   }
   // end UKF process

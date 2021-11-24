@@ -62,9 +62,9 @@ UKF::UKF()
   std_rm_yawdd_ = 3;
 
   // Laser measurement noise standard deviation position1 in m
-  std_laspx_ = 0.15;
+  std_laspx_ = 0.75; //0.15 //0.75
   // Laser measurement noise standard deviation position2 in m
-  std_laspy_ = 0.15;
+  std_laspy_ = 0.75; //0.15 // 0.75
 
   // time when the state is true, in us
   time_ = 0.0;
@@ -107,9 +107,9 @@ UKF::UKF()
   mode_match_prob_ctrv2rm_ = 0;
   mode_match_prob_rm2rm_ = 0;
 
-  mode_prob_cv_ = 0.33;
-  mode_prob_ctrv_ = 0.33;
-  mode_prob_rm_ = 0.33;
+  mode_prob_cv_ = 0.5; // 0.33; //0.9
+  mode_prob_ctrv_ = 0.45; //0.33 //0.005
+  mode_prob_rm_ = 0.05; //0.33 //0.005
 
   z_pred_cv_ = Eigen::VectorXd(2);
   z_pred_ctrv_ = Eigen::VectorXd(2);
@@ -123,8 +123,8 @@ UKF::UKF()
   k_ctrv_ = Eigen::MatrixXd(5, 2);
   k_rm_ = Eigen::MatrixXd(5, 2);
 
-  pd_ = 0.9;
-  pg_ = 0.99;
+  // pd_ = 0.9; //appears these are unused
+  // pg_ = 0.99;
 
   // tracking parameter
   lifetime_ = 0;
@@ -201,9 +201,12 @@ void UKF::initialize(const Eigen::VectorXd& z, const double timestamp, const int
 
   // first measurement
   x_merge_ << 0, 0, 0, 0, 0.1;
+  //x_merge_ << 0, 0, 0, 0, 0.1;
 
   // init covariance matrix by hardcoding since no clue about initial state covrariance
-  p_merge_ << 0.5, 0, 0, 0, 0, 0, 0.5, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 10, 0, 0, 0, 0, 0, 1;
+  p_merge_ << 1.0, 0, 0, 0, 0, 0, 1.0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 10, 0, 0, 0, 0, 0, 6;
+  //p_merge_ << 1.0, 0, 0, 0, 0, 0, 1.0, 0, 0, 0, 0, 0, 8, 0, 0, 0, 0, 0, 10, 0, 0, 0, 0, 0, 6; // this has worked in past
+  //p_merge_ << 0.5, 0, 0, 0, 0, 0, 0.5, 0, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 10, 0, 0, 0, 0, 0, 1; //original
 
   // set weights
   // reference from "The Unscented Kalman Filter for Nonlinear Estimation, Eric A. Wan and Rudolph van der Merwe, 2000"
@@ -398,14 +401,14 @@ void UKF::predictionSUKF(const double dt, const bool has_subscribed_vectormap)
   /*****************************************************************************
   *  Prediction Motion Model
   ****************************************************************************/
-  predictionMotion(dt, MotionModel::CTRV);
+  predictionMotion(dt, MotionModel::CTRV); // CTRV
   /*****************************************************************************
   *  Prediction Measurement
   ****************************************************************************/
-  predictionLidarMeasurement(MotionModel::CTRV, num_lidar_state_);
+  predictionLidarMeasurement(MotionModel::CTRV, num_lidar_state_); //CTRV
   if (has_subscribed_vectormap)
   {
-    predictionLidarMeasurement(MotionModel::CTRV, num_lidar_direction_state_);
+    predictionLidarMeasurement(MotionModel::CTRV, num_lidar_direction_state_); //CTRV
   }
 }
 
