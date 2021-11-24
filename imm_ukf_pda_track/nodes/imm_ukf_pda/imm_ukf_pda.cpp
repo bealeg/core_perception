@@ -57,7 +57,7 @@ ImmUkfPda::ImmUkfPda()
 void ImmUkfPda::run()
 {
   pub_object_array_ = node_handle_.advertise<autoware_msgs::DetectedObjectArray>("/detection/objects", 1);
-  pub_debug_objs_ = node_handle_.advertise<autoware_msgs::DetectedObjectArray>("/detection/extras", 1);
+  //pub_debug_objs_ = node_handle_.advertise<autoware_msgs::DetectedObjectArray>("/detection/extras", 1);
   sub_detected_array_ = node_handle_.subscribe("/detection/fusion_tools/objects", 1, &ImmUkfPda::callback, this);
 
   if (use_vectormap_)
@@ -720,7 +720,7 @@ void ImmUkfPda::makeOutput(const autoware_msgs::DetectedObjectArray& input,
   }
   /* try to put object publisher here!!!!!
    *
-   */
+   *
   autoware_msgs::DetectedObjectArray extras;
   for (size_t i=0; i < input.objects.size(); i++) {
 	  extras.objects.push_back(input.objects[i]);
