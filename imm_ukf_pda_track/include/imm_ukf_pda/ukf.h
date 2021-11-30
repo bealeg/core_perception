@@ -62,6 +62,8 @@ public:
 
   int num_motion_model_;
 
+	int det_s_missed_timesteps_;
+
   //* state vector: [pos1 pos2 vel_abs yaw_angle yaw_rate] in SI units and rad
   Eigen::MatrixXd x_merge_;
 

@@ -29,14 +29,23 @@ ImmUkfPda::ImmUkfPda()
   private_nh_.param<int>("life_time_threshold", life_time_threshold_, 8);
   private_nh_.param<double>("gating_threshold", gating_threshold_, 9.22);
   private_nh_.param<double>("gate_probability", gate_probability_, 0.99);
-  ROS_INFO("[IMM_UKF_PDA] gate_probability: %f", gate_probability_);
   private_nh_.param<double>("detection_probability", detection_probability_, 0.9);
-  ROS_INFO("[IMM_UKF_PDA] detection_probability_: %f", detection_probability_);
   private_nh_.param<double>("static_velocity_threshold", static_velocity_threshold_, 0.5);
   private_nh_.param<int>("static_num_history_threshold", static_num_history_threshold_, 3);
   private_nh_.param<double>("prevent_explosion_threshold", prevent_explosion_threshold_, 1000);
+  private_nh_.param<double>("long_term_prevent_explosion_threshold", long_term_prevent_explosion_thresh_, 0.00005);
+  private_nh_.param<double>("det_s_prevent_explosion_threshold", det_s_prevent_explosion_thresh_, 10.0);
+  private_nh_.param<int>("det_s_consec_timesteps_thresh", det_s_consec_timesteps_thresh_, 3);
+  private_nh_.param<int>("long_term_prevent_explosion_threshold_age_requirement", long_term_explosion_age_thresh_, 20);
   private_nh_.param<double>("merge_distance_threshold", merge_distance_threshold_, 0.5);
   private_nh_.param<bool>("use_sukf", use_sukf_, false);
+  
+  ROS_INFO("[IMM_UKF_PDA] gate_probability: %f", gate_probability_);
+  ROS_INFO("[IMM_UKF_PDA] detection_probability_: %f", detection_probability_);
+  ROS_INFO("[IMM_UKF_PDA] long_term_prevent_explosion_threshold: %f", long_term_prevent_explosion_thresh_);
+  ROS_INFO("[IMM_UKF_PDA] long_term_prevent_explosion_threshold_age_requirement: %f", long_term_explosion_age_thresh_);
+  ROS_INFO("[IMM_UKF_PDA] det_s_prevent_explosion_threshold: %f", det_s_prevent_explosion_thresh_);
+  ROS_INFO("[IMM_UKF_PDA] det_s_consec_timesteps_thresh: %d", det_s_prevent_explosion_thresh_);
 
   // for vectormap assisted tracking
   private_nh_.param<bool>("use_vectormap", use_vectormap_, false);
@@ -461,15 +470,37 @@ bool ImmUkfPda::probabilisticDataAssociation(const autoware_msgs::DetectedObject
     target.findMaxZandS(max_det_z, max_det_s);
     det_s = max_det_s.determinant();
   }
-
-  // prevent ukf not to explode
-  if (std::isnan(det_s) || det_s > prevent_explosion_threshold_)
+	
+	ROS_INFO("[IMM_UKF_PDA] target id, lifetime, det_s, det, missed_ts: (%3d, %3d, %10.4f, %12.6f, %2d) ", target.ukf_id_,target.lifetime_,det_s,target.p_merge_.determinant(),target.det_s_missed_timesteps_);
+	
+  // prevent ukf not to explode for newly seen targets
+  if (target.lifetime_ < long_term_explosion_age_thresh_)
   {
-    target.tracking_num_ = TrackingState::Die;
-    success = false;
-    return success;
-  }
-
+		if (std::isnan(det_s) || det_s > prevent_explosion_threshold_)
+		{
+			target.tracking_num_ = TrackingState::Die;
+			success = false;
+			return success;
+		}
+	}
+	else // prevent ukf not to explode for older targets
+	{
+		if (std::isnan(det_s) || det_s > det_s_prevent_explosion_thresh_)
+		{	// if det_s > threshold, increment counter and if counter > timestep_thresh -> tell it clear track
+			target.det_s_missed_timesteps_ ++;
+			if (target.det_s_missed_timesteps_ > det_s_consec_timesteps_thresh_)
+			{
+				target.tracking_num_ = TrackingState::Die;
+				success = false;
+				return success;
+			}
+		} // reset counter to 0 if we fall back under the thresh for a timestep
+		else if (target.det_s_missed_timesteps_ > 0)
+		{
+			target.det_s_missed_timesteps_ = 0;
+		}
+	}
+	
   bool is_second_init;
   if (target.tracking_num_ == TrackingState::Init)
   {
@@ -727,9 +758,9 @@ void ImmUkfPda::makeOutput(const autoware_msgs::DetectedObjectArray& input,
   }
   transformPoseToLocal(extras);
   pub_debug_objs_.publish(extras);
-  /*
-   * end
-   */
+	*
+  * end
+  */
   
   detected_objects_output = removeRedundantObjects(tmp_objects, used_targets_indices);
 }
@@ -800,9 +831,8 @@ void ImmUkfPda::tracker(const autoware_msgs::DetectedObjectArray& input,
 
   double dt = (timestamp - timestamp_);
   timestamp_ = timestamp;
-
-
-  // start UKF process
+  
+    // start UKF process
   for (size_t i = 0; i < targets_.size(); i++)
   {
     targets_[i].is_stable_ = false; // false;
@@ -812,13 +842,25 @@ void ImmUkfPda::tracker(const autoware_msgs::DetectedObjectArray& input,
     {
       continue;
     }
-    // prevent ukf not to explode
-    if (targets_[i].p_merge_.determinant() > prevent_explosion_threshold_ ||
-        targets_[i].p_merge_(4, 4) > prevent_explosion_threshold_)
-    {
-      targets_[i].tracking_num_ = TrackingState::Die;
-      continue;
-    }
+    
+    //ROS_INFO("[IMM_UKF_PDA] target id, lifetime, det, det(4,4), motionModel: (%d, %d, %f, %f, %d) ", targets_[i].ukf_id_,targets_[i].lifetime_,targets_[i].p_merge_.determinant(), targets_[i].p_merge_(4, 4), targets_[i].tracking_num_);
+    
+    // prevent ukf not to explode for newly seen objs
+    //if (targets_[i].lifetime_ <= long_term_explosion_age_thresh_) {
+			if (targets_[i].p_merge_.determinant() > prevent_explosion_threshold_ ||
+					targets_[i].p_merge_(4, 4) > prevent_explosion_threshold_)
+			{
+				targets_[i].tracking_num_ = TrackingState::Die;
+				continue;
+			}
+		/*} // prevent ukf not to explode for older objs (smaller threshold)
+		else {
+			if (targets_[i].p_merge_.determinant() > long_term_prevent_explosion_thresh_)
+			{
+				targets_[i].tracking_num_ = TrackingState::Die;
+				continue;
+			}
+		}*/
 
     targets_[i].prediction(use_sukf_, has_subscribed_vectormap_, dt);
 

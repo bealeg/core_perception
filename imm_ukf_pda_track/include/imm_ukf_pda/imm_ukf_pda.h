@@ -74,6 +74,10 @@ private:
 
   // prevent explode param for ukf
   double prevent_explosion_threshold_;
+	double long_term_prevent_explosion_thresh_;
+	double det_s_prevent_explosion_thresh_;
+	int long_term_explosion_age_thresh_;
+	int det_s_consec_timesteps_thresh_;
 
   // for vectormap assisted tarcking
   bool use_vectormap_;
