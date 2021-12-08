@@ -68,6 +68,9 @@ private:
   bool is_benchmark_;
   int frame_count_;
   std::string kitti_data_dir_;
+  
+  // whether to print debug stats
+  bool print_debug_;
 
   // for benchmark
   std::string result_file_path_;

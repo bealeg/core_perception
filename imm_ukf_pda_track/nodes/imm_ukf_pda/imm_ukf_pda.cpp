@@ -39,6 +39,7 @@ ImmUkfPda::ImmUkfPda()
   private_nh_.param<int>("long_term_prevent_explosion_threshold_age_requirement", long_term_explosion_age_thresh_, 20);
   private_nh_.param<double>("merge_distance_threshold", merge_distance_threshold_, 0.5);
   private_nh_.param<bool>("use_sukf", use_sukf_, false);
+  private_nh_.param<bool>("print_debug", print_debug_, false);
   
   ROS_INFO("[IMM_UKF_PDA] gate_probability: %f", gate_probability_);
   ROS_INFO("[IMM_UKF_PDA] detection_probability_: %f", detection_probability_);
@@ -471,7 +472,10 @@ bool ImmUkfPda::probabilisticDataAssociation(const autoware_msgs::DetectedObject
     det_s = max_det_s.determinant();
   }
 	
-	ROS_INFO("[IMM_UKF_PDA] target id, lifetime, det_s, det, missed_ts: (%3d, %3d, %10.4f, %12.6f, %2d) ", target.ukf_id_,target.lifetime_,det_s,target.p_merge_.determinant(),target.det_s_missed_timesteps_);
+	if (print_debug_)
+	{
+		ROS_INFO("[IMM_UKF_PDA] target id, lifetime, det_s, det, missed_ts: (%3d, %3d, %10.4f, %12.6f, %2d) ", target.ukf_id_,target.lifetime_,det_s,target.p_merge_.determinant(),target.det_s_missed_timesteps_);
+	}
 	
   // prevent ukf not to explode for newly seen targets
   if (target.lifetime_ < long_term_explosion_age_thresh_)

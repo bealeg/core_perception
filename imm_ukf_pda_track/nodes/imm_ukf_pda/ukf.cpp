@@ -108,8 +108,8 @@ UKF::UKF()
   mode_match_prob_ctrv2rm_ = 0;
   mode_match_prob_rm2rm_ = 0;
 
-  mode_prob_cv_ = 0.5; // 0.33; //0.9
-  mode_prob_ctrv_ = 0.45; //0.33 //0.005
+  mode_prob_cv_ = 0.8; // 0.33; //0.9
+  mode_prob_ctrv_ = 0.15; //0.33 //0.005
   mode_prob_rm_ = 0.05; //0.33 //0.005
 
   z_pred_cv_ = Eigen::VectorXd(2);
