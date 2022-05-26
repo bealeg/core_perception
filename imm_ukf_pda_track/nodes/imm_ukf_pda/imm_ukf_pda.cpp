@@ -46,7 +46,7 @@ ImmUkfPda::ImmUkfPda()
   ROS_INFO("[IMM_UKF_PDA] long_term_prevent_explosion_threshold: %f", long_term_prevent_explosion_thresh_);
   ROS_INFO("[IMM_UKF_PDA] long_term_prevent_explosion_threshold_age_requirement: %f", long_term_explosion_age_thresh_);
   ROS_INFO("[IMM_UKF_PDA] det_s_prevent_explosion_threshold: %f", det_s_prevent_explosion_thresh_);
-  ROS_INFO("[IMM_UKF_PDA] det_s_consec_timesteps_thresh: %d", det_s_prevent_explosion_thresh_);
+  ROS_INFO("[IMM_UKF_PDA] det_s_consec_timesteps_thresh: %d", det_s_consec_timesteps_thresh);
 
   // for vectormap assisted tracking
   private_nh_.param<bool>("use_vectormap", use_vectormap_, false);
