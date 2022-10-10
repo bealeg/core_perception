@@ -33,20 +33,28 @@ ImmUkfPda::ImmUkfPda()
   private_nh_.param<double>("static_velocity_threshold", static_velocity_threshold_, 0.5);
   private_nh_.param<int>("static_num_history_threshold", static_num_history_threshold_, 3);
   private_nh_.param<double>("prevent_explosion_threshold", prevent_explosion_threshold_, 1000);
+  private_nh_.param<double>("merge_distance_threshold", merge_distance_threshold_, 0.5);
+  private_nh_.param<bool>("use_sukf", use_sukf_, false);
+  private_nh_.param<bool>("print_debug", print_debug_, false);
+  
+  // BEGIN added params
   private_nh_.param<double>("long_term_prevent_explosion_threshold", long_term_prevent_explosion_thresh_, 0.00005);
   private_nh_.param<double>("det_s_prevent_explosion_threshold", det_s_prevent_explosion_thresh_, 10.0);
   private_nh_.param<int>("det_s_consec_timesteps_thresh", det_s_consec_timesteps_thresh_, 3);
   private_nh_.param<int>("long_term_prevent_explosion_threshold_age_requirement", long_term_explosion_age_thresh_, 20);
-  private_nh_.param<double>("merge_distance_threshold", merge_distance_threshold_, 0.5);
-  private_nh_.param<bool>("use_sukf", use_sukf_, false);
-  private_nh_.param<bool>("print_debug", print_debug_, false);
+  private_nh_.param<bool>("remove_long_objects", rm_long_objs_, false);
+  private_nh_.param<int>("rm_long_objs_ratio", rm_long_objs_ratio_, 15);
+  private_nh_.param<bool>("do_ped_classification", do_ped_classification_, false);
+  // END added params
   
   ROS_INFO("[IMM_UKF_PDA] gate_probability: %f", gate_probability_);
   ROS_INFO("[IMM_UKF_PDA] detection_probability_: %f", detection_probability_);
   ROS_INFO("[IMM_UKF_PDA] long_term_prevent_explosion_threshold: %f", long_term_prevent_explosion_thresh_);
   ROS_INFO("[IMM_UKF_PDA] long_term_prevent_explosion_threshold_age_requirement: %f", long_term_explosion_age_thresh_);
   ROS_INFO("[IMM_UKF_PDA] det_s_prevent_explosion_threshold: %f", det_s_prevent_explosion_thresh_);
-  ROS_INFO("[IMM_UKF_PDA] det_s_consec_timesteps_thresh: %d", det_s_consec_timesteps_thresh);
+  ROS_INFO("[IMM_UKF_PDA] det_s_consec_timesteps_thresh: %d", det_s_consec_timesteps_thresh_);
+  ROS_INFO("[IMM_UKF_PDA] remove long objects: %d", rm_long_objs_);
+  ROS_INFO("[IMM_UKF_PDA] remove long objects ratio thresh: %d", rm_long_objs_ratio_);
 
   // for vectormap assisted tracking
   private_nh_.param<bool>("use_vectormap", use_vectormap_, false);
@@ -99,6 +107,9 @@ void ImmUkfPda::callback(const autoware_msgs::DetectedObjectArray& input)
   transformPoseToGlobal(input, transformed_input);
   tracker(transformed_input, detected_objects_output);
   transformPoseToLocal(detected_objects_output);
+  if (do_ped_classification_) {
+    performPedClassification(detected_objects_output);
+  }
 
   pub_object_array_.publish(detected_objects_output);
 
@@ -847,16 +858,33 @@ void ImmUkfPda::tracker(const autoware_msgs::DetectedObjectArray& input,
       continue;
     }
     
+    //  BEGIN added code
+    /// ROS_INFO("[IMM_UKF_PDA] id, dim x, dim y, ratio: (%d, %f, %f, %f) ", targets_[i].ukf_id_, targets_[i].object_.dimensions.x, targets_[i].object_.dimensions.y, targets_[i].object_.dimensions.x / targets_[i].object_.dimensions.y);
+    // ROS_INFO("[IMM_UKF_PDA] id, dim x, dim y: [%f, f] ", targets_[i].object_.dimensions.x, targets_[i].object_.dimensions.y);
+    // added code to try and remove guardrails
+    /* if (rm_long_objs_ && (targets_[i].object_.dimensions.x / targets_[i].object_.dimensions.y) > rm_long_objs_ratio_)
+    {
+      targets_[i].tracking_num_ = TrackingState::Die;
+      ROS_INFO("[IMM_UKF_PDA] removing ID: (%d) ", targets_[i].ukf_id_);
+    }
+    */
+    
+    
+    
     //ROS_INFO("[IMM_UKF_PDA] target id, lifetime, det, det(4,4), motionModel: (%d, %d, %f, %f, %d) ", targets_[i].ukf_id_,targets_[i].lifetime_,targets_[i].p_merge_.determinant(), targets_[i].p_merge_(4, 4), targets_[i].tracking_num_);
+    // END added code
+    
     
     // prevent ukf not to explode for newly seen objs
     //if (targets_[i].lifetime_ <= long_term_explosion_age_thresh_) {
+			// BEGIN original code
 			if (targets_[i].p_merge_.determinant() > prevent_explosion_threshold_ ||
 					targets_[i].p_merge_(4, 4) > prevent_explosion_threshold_)
 			{
 				targets_[i].tracking_num_ = TrackingState::Die;
 				continue;
 			}
+			// END original code
 		/*} // prevent ukf not to explode for older objs (smaller threshold)
 		else {
 			if (targets_[i].p_merge_.determinant() > long_term_prevent_explosion_thresh_)
@@ -889,4 +917,34 @@ void ImmUkfPda::tracker(const autoware_msgs::DetectedObjectArray& input,
 
   // remove unnecessary ukf object
   removeUnnecessaryTarget();
+  
+}
+
+// Shold be used only for SOADS specific scenario.
+// based on size of bounding box for a tracked object, estimate if it could be 
+// a pedestrian, and if so, whether the pedestrian is not moving and laying on
+// the ground, or walking normally.
+void ImmUkfPda::performPedClassification(autoware_msgs::DetectedObjectArray& detected_objects) {
+  
+  for (size_t i = 0; i < detected_objects.objects.size(); i++) {
+    if (detected_objects.objects[i].dimensions.x < 4.0 && detected_objects.objects[i].dimensions.y < 4.0 ) { 
+      if (detected_objects.objects[i].dimensions.z < 1.5) {
+        // candidate for pedestrian on ground, check speed
+        if (abs(detected_objects.objects[i].velocity.linear.x) < 0.55) { // ~ 2.0 kph
+          // low spped, lets try to classify as ped on ground
+          detected_objects.objects[i].label = "ped_on_ground";
+          ROS_INFO("[IMM_UKF_PDA] id, z-dim, velo, label : [%3d, %4.2f, %4.2f, %s,] ", detected_objects.objects[i].id, detected_objects.objects[i].dimensions.z, detected_objects.objects[i].velocity.linear.x, detected_objects.objects[i].label.c_str());
+        }
+        else {
+          detected_objects.objects[i].label = "ped_on_ground_moving";
+        }
+      } // ped not on ground
+      else {
+        detected_objects.objects[i].label = "ped_standing";
+        ROS_INFO("[IMM_UKF_PDA] id, z-dim, velo, label : [%3d, %4.2f, %4.2f, %s,] ", detected_objects.objects[i].id, detected_objects.objects[i].dimensions.z, detected_objects.objects[i].velocity.linear.x, detected_objects.objects[i].label.c_str());
+      }
+    }
+  }
+  
+  
 }

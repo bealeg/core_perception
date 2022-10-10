@@ -69,14 +69,22 @@ private:
   int frame_count_;
   std::string kitti_data_dir_;
   
-  // whether to print debug stats
+  // whether to print debug stats (added by GB)
   bool print_debug_;
+  
+  // remove long objects (added by GB)
+  bool rm_long_objs_;
+  int rm_long_objs_ratio_;
+  
+  // pedestrian classification (added by GB)
+  bool do_ped_classification_;
 
   // for benchmark
   std::string result_file_path_;
 
   // prevent explode param for ukf
   double prevent_explosion_threshold_;
+  // added by GB
 	double long_term_prevent_explosion_thresh_;
 	double det_s_prevent_explosion_thresh_;
 	int long_term_explosion_age_thresh_;
@@ -185,6 +193,8 @@ private:
 
   void updateTargetWithAssociatedObject(const std::vector<autoware_msgs::DetectedObject>& object_vec,
                                         UKF& target);
+  
+  void performPedClassification(autoware_msgs::DetectedObjectArray& detected_objects);
 
 public:
   ImmUkfPda();
